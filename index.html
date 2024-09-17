@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Graph of Nodes</title>
+    <style>
+        body {
+            margin: 0;
+            background-color: black;
+            color: white;
+            font-family: Arial, sans-serif;
+        }
+        #title {
+            color: white;
+            text-align: center;
+            font-size: 48px;
+            margin-top: 20px;
+            margin-bottom: 20px;
+        }
+        #controls {
+            position: absolute;
+            top: 100px; /* Adjusted to position below the title */
+            left: 10px;
+            background-color: rgba(0, 0, 0, 0.7);
+            padding: 10px;
+            border-radius: 5px;
+        }
+        #controls label, #controls select, #controls button {
+            color: white;
+            margin: 5px;
+        }
+        #controls input {
+            color: black;
+            background-color: white;
+            margin: 5px;
+        }
+        #controls input::placeholder {
+            color: grey;
+        }
+        svg {
+            width: 100%;
+            height: 100vh;
+        }
+        text {
+            fill: black;
+            font-size: 14px;
+            pointer-events: none;
+        }
+        line {
+            stroke: white;
+            stroke-width: 2px;
+        }
+        circle {
+            fill: yellow;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <h1 id="title">The Grateful Emporium</h1>
+    <div id="controls">
+        <label for="parentNode">Parent Node:</label>
+        <select id="parentNode"></select>
+        <label for="newNodeName">New Node Name:</label>
+        <input type="text" id="newNodeName" placeholder="Enter node name">
+        <button id="addNodeButton">Add Node</button>
+    </div>
+    <svg id="svgCanvas"></svg>
+
+    <!-- Include D3.js library -->
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <script>
+        // Initialize nodes and links
+        var nodes = [
+            {
+                id: 1,
+                name: "Grateful dead",
+                x: window.innerWidth / 2,
+                y: 150, // Adjusted to accommodate the title
+                fx: window.innerWidth / 2,
+                fy: 150,
+                initialX: window.innerWidth / 2,
+                initialY: 150,
+                clicked: false
+            }
+        ];
+
+        var links = [];
+
+        // Set up the SVG canvas with zoom and pan
+        var svg = d3.select("#svgCanvas")
+            .call(d3.zoom().on("zoom", function (event) {
+                svgGroup.attr("transform", event.transform);
+            }))
+            .append("g");
+
+        var svgGroup = svg.append("g");
+
+        // Create groups for links and nodes to control their rendering order
+        var linkGroup = svgGroup.append("g").attr("class", "links");
+        var nodeGroup = svgGroup.append("g").attr("class", "nodes");
+
+        // Define the drag behavior
+        var drag = d3.drag()
+            .on("start", dragStarted)
+            .on("drag", dragged)
+            .on("end", dragEnded);
+
+        function dragStarted(event, d) {
+            d.fx = null;
+            d.fy = null;
+        }
+
+        function dragged(event, d) {
+            d.x = event.x;
+            d.y = event.y;
+            d3.select(this).attr("transform", "translate(" + d.x + "," + d.y + ")");
+            updateLinks();
+        }
+
+        function dragEnded(event, d) {
+            // Animate back to initial position
+            d3.select(this).transition().duration(500)
+                .attr("transform", "translate(" + d.initialX + "," + d.initialY + ")")
+                .on("end", function() {
+                    d.x = d.initialX;
+                    d.y = d.initialY;
+                    d.fx = d.initialX;
+                    d.fy = d.initialY;
+                    updateLinks();
+                });
+        }
+
+        function updateLinks() {
+            linkGroup.selectAll("line")
+                .attr("x1", function(d) { return d.source.x; })
+                .attr("y1", function(d) { return d.source.y; })
+                .attr("x2", function(d) { return d.target.x; })
+                .attr("y2", function(d) { return d.target.y; });
+        }
+
+        // Function to update the visualization
+        function update() {
+            // Update the links
+            var link = linkGroup.selectAll("line")
+                .data(links, function(d) { return d.source.id + "-" + d.target.id; });
+
+            link.enter().append("line")
+                .attr("class", "link")
+                .attr("x1", function(d) { return d.source.x; })
+                .attr("y1", function(d) { return d.source.y; })
+                .attr("x2", function(d) { return d.target.x; })
+                .attr("y2", function(d) { return d.target.y; })
+                .merge(link);
+
+            link.exit().remove();
+
+            // Update the nodes
+            var node = nodeGroup.selectAll("g.node")
+                .data(nodes, function(d) { return d.id; });
+
+            var nodeEnter = node.enter().append("g")
+                .attr("class", "node")
+                .attr("transform", function(d) { return "translate(" + d.x + "," + d.y + ")"; })
+                .on("click", nodeClicked)
+                .call(drag);
+
+            nodeEnter.append("circle")
+                .attr("r", 50);
+
+            nodeEnter.append("text")
+                .attr("text-anchor", "middle")
+                .attr("dy", 5)
+                .text(function(d) { return d.name; });
+
+            node.exit().remove();
+
+            // Update the parent node selection dropdown
+            updateParentNodeDropdown();
+        }
+
+        // Function to handle node clicks
+        function nodeClicked(event, d) {
+            // Prevent click event from firing when dragging
+            if (event.defaultPrevented) return;
+
+            if (d.clicked) return; // Node already clicked, do nothing
+            d.clicked = true;
+
+            if (d.name === "Grateful dead") {
+                // Arrange "The Band", "The Music", "The Culture" nodes
+                var radius = 200;
+                var angles = [-Math.PI / 4, 0, Math.PI / 4]; // -45°, 0°, +45°
+                var names = ["The Band", "The Music", "The Culture"];
+                var newNodes = [];
+                angles.forEach(function(angle, index) {
+                    var x = d.x + radius * Math.sin(angle);
+                    var y = d.y + radius * Math.cos(angle);
+                    var nodeId = nodes.length + 1;
+                    var newNode = {
+                        id: nodeId,
+                        name: names[index],
+                        x: x,
+                        y: y,
+                        fx: x,
+                        fy: y,
+                        initialX: x,
+                        initialY: y,
+                        clicked: false
+                    };
+                    newNodes.push(newNode);
+                    links.push({ source: d, target: newNode });
+                    nodes.push(newNode);
+                });
+            } else if (d.name === "The Band") {
+                // Arrange "Jerry", "Bobby", "Phil" nodes
+                var radius = 200;
+                var angles = [-Math.PI / 6, 0, Math.PI / 6]; // -30°, 0°, +30°
+                var names = ["Jerry", "Bobby", "Phil"];
+                var newNodes = [];
+                angles.forEach(function(angle, index) {
+                    var x = d.x + radius * Math.sin(angle);
+                    var y = d.y + radius * Math.cos(angle);
+                    var nodeId = nodes.length + 1;
+                    var newNode = {
+                        id: nodeId,
+                        name: names[index],
+                        x: x,
+                        y: y,
+                        fx: x,
+                        fy: y,
+                        initialX: x,
+                        initialY: y,
+                        clicked: false
+                    };
+                    newNodes.push(newNode);
+                    links.push({ source: d, target: newNode });
+                    nodes.push(newNode);
+                });
+            }
+
+            update();
+        }
+
+        // Function to update the parent node dropdown
+        function updateParentNodeDropdown() {
+            var parentNodeSelect = d3.select("#parentNode");
+            var options = parentNodeSelect.selectAll("option")
+                .data(nodes, function(d) { return d.id; });
+
+            options.enter()
+                .append("option")
+                .attr("value", function(d) { return d.id; })
+                .text(function(d) { return d.name; });
+
+            options.exit().remove();
+        }
+
+        // Function to add a new node from user input
+        function addNodeFromInput() {
+            var parentId = parseInt(document.getElementById("parentNode").value);
+            var newNodeName = document.getElementById("newNodeName").value.trim();
+
+            if (!newNodeName) {
+                alert("Please enter a name for the new node.");
+                return;
+            }
+
+            var parentNode = nodes.find(function(n) { return n.id === parentId; });
+            if (!parentNode) {
+                alert("Parent node not found.");
+                return;
+            }
+
+            // Position the new node below the parent node
+            var angle = Math.random() * Math.PI - (Math.PI / 2); // Random angle between -90° and +90°
+            var radius = 200;
+            var x = parentNode.x + radius * Math.sin(angle);
+            var y = parentNode.y + radius * Math.cos(angle);
+            var nodeId = nodes.length + 1;
+            var newNode = {
+                id: nodeId,
+                name: newNodeName,
+                x: x,
+                y: y,
+                fx: x,
+                fy: y,
+                initialX: x,
+                initialY: y,
+                clicked: false
+            };
+
+            nodes.push(newNode);
+            links.push({ source: parentNode, target: newNode });
+
+            // Clear the input field
+            document.getElementById("newNodeName").value = "";
+
+            update();
+        }
+
+        // Attach event listener to the "Add Node" button
+        document.getElementById("addNodeButton").addEventListener("click", addNodeFromInput);
+
+        // Initial rendering
+        update();
+    </script>
+</body>
+</html>
